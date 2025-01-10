@@ -8,6 +8,7 @@ import (
 
 	"github.com/igorcrevar/go-cardano-tx/common"
 	cardano "github.com/igorcrevar/go-cardano-tx/core"
+	"github.com/igorcrevar/go-cardano-tx/sendtx"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 	testNetMagic            = uint(2)
 	ogmiosUrl               = "http://localhost:1337"
 	blockfrostUrl           = "https://cardano-preview.blockfrost.io/api/v0"
-	blockfrostProjectApiKey = ""
+	blockfrostProjectApiKey = "preview7mGSjpyEKb24OxQ4cCxomxZ5axMs5PvE"
 	potentialFee            = uint64(300_000)
 	providerName            = "blockfrost"
 	receiverAddr            = "addr_test1wz4k6frsfd9q98rya6zjxtpcmzn83pwc8uyl9yqw25p8qqcx3e0c0"
@@ -83,13 +84,15 @@ func createTx(
 		return nil, "", err
 	}
 
-	inputs, err := cardano.GetUTXOsForAmount(
-		context.Background(),
-		txProvider,
-		senderAddress,
-		[]string{cardano.AdaTokenName},
-		map[string]uint64{cardano.AdaTokenName: lovelaceSendAmount + potentialFee + minUtxoValue},
-		map[string]uint64{cardano.AdaTokenName: lovelaceSendAmount + potentialFee + minUtxoValue})
+	utxos, err := txProvider.GetUtxos(context.Background(), senderAddress)
+	if err != nil {
+		return nil, "", err
+	}
+
+	inputs, err := sendtx.GetUTXOsForAmounts(
+		utxos, map[string]uint64{
+			cardano.AdaTokenName: lovelaceSendAmount + potentialFee + minUtxoValue,
+		}, 20, 1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -216,24 +219,28 @@ func createMultiSigTx(
 		return nil, "", err
 	}
 
-	multiSigInputs, err := cardano.GetUTXOsForAmount(
-		context.Background(),
-		txProvider,
-		multiSigAddr.String(),
-		[]string{cardano.AdaTokenName},
-		map[string]uint64{cardano.AdaTokenName: lovelaceSendAmount + minUtxoValue},
-		map[string]uint64{cardano.AdaTokenName: lovelaceSendAmount + minUtxoValue})
+	utxosMultisig, err := txProvider.GetUtxos(context.Background(), multiSigAddr.String())
 	if err != nil {
 		return nil, "", err
 	}
 
-	multiSigFeeInputs, err := cardano.GetUTXOsForAmount(
-		context.Background(),
-		txProvider,
-		multiSigFeeAddr.String(),
-		[]string{cardano.AdaTokenName},
-		map[string]uint64{cardano.AdaTokenName: potentialFee},
-		map[string]uint64{cardano.AdaTokenName: potentialFee + minUtxoValue})
+	utxosFee, err := txProvider.GetUtxos(context.Background(), multiSigFeeAddr.String())
+	if err != nil {
+		return nil, "", err
+	}
+
+	multiSigInputs, err := sendtx.GetUTXOsForAmounts(
+		utxosMultisig, map[string]uint64{
+			cardano.AdaTokenName: lovelaceSendAmount + minUtxoValue,
+		}, 20, 1)
+	if err != nil {
+		return nil, "", err
+	}
+
+	multiSigFeeInputs, err := sendtx.GetUTXOsForAmounts(
+		utxosFee, map[string]uint64{
+			cardano.AdaTokenName: potentialFee + minUtxoValue,
+		}, 20, 1)
 	if err != nil {
 		return nil, "", err
 	}
