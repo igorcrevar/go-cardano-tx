@@ -329,14 +329,6 @@ func createProvider(name string, cardanoCliBinary string) (cardano.ITxProvider, 
 }
 
 func loadWallets() ([]*cardano.Wallet, error) {
-	verificationKeys := []string{
-		"582068fc463c29900b00122423c7e6a39469987786314e07a5e7f5eae76a5fe671bf",
-		"58209a9cefaa636d75dffa3a3a5ab446a191beac92b09ac82da513640e8e35935202",
-		"5820839c3bd7397f35bf55d63c0bcb3880c95ffd91e8c3bfc405a60f6c605a7a40f2",
-		"582063e95162d952d2fbc5240457750e1c13bfb4a5e3d9a96bf048b90bfe08b13de6",
-		"5820030083fd0293fc6ed8d76faf02365617066f37ad6a6d6047b801e2865914d900",
-		"5820ad5a1761213fb82a859333d78d66cf0d9dc56e413a26fe3108b5f21bac1d5fa4",
-	}
 	signingKeys := []string{
 		"58201825bce09711e1563fc1702587da6892d1d869894386323bd4378ea5e3d6cba0",
 		"5820ccdae0d1cd3fa9be16a497941acff33b9aa20bdbf2f9aa5715942d152988e083",
@@ -346,19 +338,14 @@ func loadWallets() ([]*cardano.Wallet, error) {
 		"582058fb35da120c65855ad691dadf5681a2e4fc62e9dcda0d0774ff6fdc463a679a",
 	}
 
-	wallets := make([]*cardano.Wallet, len(verificationKeys))
-	for i := range verificationKeys {
-		signingKey, err := cardano.GetKeyBytes(signingKeys[i])
+	wallets := make([]*cardano.Wallet, len(signingKeys))
+	for i, sk := range signingKeys {
+		signingKey, err := cardano.GetKeyBytes(sk)
 		if err != nil {
 			return nil, err
 		}
 
-		verificationKey, err := cardano.GetKeyBytes(verificationKeys[i])
-		if err != nil {
-			return nil, err
-		}
-
-		wallets[i] = cardano.NewWallet(verificationKey, signingKey)
+		wallets[i] = cardano.NewWallet(signingKey, nil)
 	}
 
 	return wallets, nil

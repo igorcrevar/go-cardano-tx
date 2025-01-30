@@ -9,18 +9,9 @@ import (
 )
 
 const (
-	KeyHashSize = 28
-	KeySize     = 32
-
-	StakeSigningKeyShelley          = "StakeSigningKeyShelley_ed25519"
-	StakeSigningKeyShelleyDesc      = "Stake Signing Key"
-	StakeVerificationKeyShelley     = "StakeVerificationKeyShelley_ed25519"
-	StakeVerificationKeyShelleyDesc = "Stake Verification Key"
-
-	PaymentSigningKeyShelley          = "PaymentSigningKeyShelley_ed25519"
-	PaymentSigningKeyShelleyDesc      = "Payment Signing Key"
-	PaymentVerificationKeyShelley     = "PaymentVerificationKeyShelley_ed25519"
-	PaymentVerificationKeyShelleyDesc = "Payment Verification Key"
+	KeyHashSize     = 28
+	KeySize         = 32
+	KeyExtendedSize = 128
 )
 
 type Wallet struct {
@@ -30,48 +21,72 @@ type Wallet struct {
 	StakeSigningKey      []byte `json:"sstake"`
 }
 
-func NewWallet(verificationKey []byte, signingKey []byte) *Wallet {
-	return &Wallet{
-		VerificationKey: PadKeyToSize(verificationKey),
-		SigningKey:      PadKeyToSize(signingKey),
-	}
-}
+var _ ITxSigner = (*Wallet)(nil)
 
-func NewStakeWallet(verificationKey []byte, signingKey []byte,
-	stakeVerificationKey []byte, stakeSigningKey []byte) *Wallet {
+func NewWallet(signingKey, stakeSigningKey []byte) *Wallet {
+	getVerificationKey := func(signingKey []byte) []byte {
+		if len(signingKey) >= 96 {
+			return signingKey[64:96]
+		}
+
+		return GetVerificationKeyFromSigningKey(signingKey)
+	}
+
+	signingKey = PadKeyToSize(signingKey)
+	stakeVerificationKey := []byte(nil)
+
+	if len(stakeSigningKey) > 0 {
+		stakeSigningKey = PadKeyToSize(stakeSigningKey)
+		stakeVerificationKey = getVerificationKey(stakeSigningKey)
+	} else {
+		stakeSigningKey = nil
+	}
+
 	return &Wallet{
-		StakeVerificationKey: PadKeyToSize(stakeVerificationKey),
-		StakeSigningKey:      PadKeyToSize(stakeSigningKey),
-		VerificationKey:      PadKeyToSize(verificationKey),
-		SigningKey:           PadKeyToSize(signingKey),
+		SigningKey:           signingKey,
+		VerificationKey:      getVerificationKey(signingKey),
+		StakeSigningKey:      stakeSigningKey,
+		StakeVerificationKey: stakeVerificationKey,
 	}
 }
 
 // GenerateWallet generates wallet
 func GenerateWallet(isStake bool) (*Wallet, error) {
+	var stakeSigningKey, stakeVerificationKey []byte
+
 	signingKey, verificationKey, err := GenerateKeyPair()
 	if err != nil {
 		return nil, err
 	}
 
-	if !isStake {
-		return NewWallet(verificationKey, signingKey), nil
+	if isStake {
+		stakeSigningKey, stakeVerificationKey, err = GenerateKeyPair()
+		if err != nil {
+			return nil, err
+		}
+
+		stakeSigningKey, stakeVerificationKey = PadKeyToSize(stakeSigningKey), PadKeyToSize(stakeVerificationKey)
 	}
 
-	stakeSigningKey, stakeVerificationKey, err := GenerateKeyPair()
+	return &Wallet{
+		SigningKey:           PadKeyToSize(signingKey),
+		VerificationKey:      PadKeyToSize(verificationKey),
+		StakeSigningKey:      stakeSigningKey,
+		StakeVerificationKey: stakeVerificationKey,
+	}, nil
+}
+
+func (w Wallet) CreateTxWitness(txHash []byte) ([]byte, error) {
+	signature, err := SignMessage(w.SigningKey, w.VerificationKey, txHash)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewStakeWallet(verificationKey, signingKey, stakeVerificationKey, stakeSigningKey), nil
+	return cbor.Marshal([][]byte{w.VerificationKey, signature})
 }
 
-func (w Wallet) SignTransaction(txRaw []byte) ([]byte, error) {
-	return SignMessage(w.SigningKey, w.VerificationKey, txRaw)
-}
-
-func (w Wallet) GetTransactionVerificationKey() []byte {
-	return w.VerificationKey
+func (w Wallet) GetPaymentKeys() ([]byte, []byte) {
+	return w.SigningKey, w.VerificationKey
 }
 
 type Key struct {

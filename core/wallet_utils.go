@@ -102,20 +102,25 @@ func GetKeyHash(bytes []byte) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// PadKeyToSize pads key to 32 bytes
+// PadKeyToSize pads key to KeySize or KeyExtendedSize bytes
 func PadKeyToSize(key []byte) []byte {
-	// If the key is already 32 bytes long, return it as is
-	if len(key) == KeySize {
+	size := KeySize
+	if len(key) > KeyExtendedSize/2 {
+		size = KeyExtendedSize
+	}
+
+	// If the key is already size bytes long, return it as is
+	if len(key) == size {
 		return key
 	}
 
-	// If the key is shorter than 32 bytes, pad with leading zeroes
-	if len(key) < KeySize {
-		return append(make([]byte, KeySize-len(key)), key...)
+	// If the key is shorter than size bytes, pad with leading zeroes
+	if len(key) < size {
+		return append(make([]byte, size-len(key)), key...)
 	}
 
-	// If the key is longer than 32 bytes, truncate it to 32 bytes
-	return key[:KeySize]
+	// If the key is longer than size bytes, truncate it to size bytes
+	return key[:size]
 }
 
 // GetKeyBytes extracts the original key bytes from a given string. Supported formats:

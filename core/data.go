@@ -102,8 +102,8 @@ type ITxProvider interface {
 }
 
 type ITxSigner interface {
-	SignTransaction([]byte) ([]byte, error)
-	GetTransactionVerificationKey() []byte
+	CreateTxWitness(txHash []byte) ([]byte, error)
+	GetPaymentKeys() ([]byte, []byte)
 }
 
 type IPolicyScript interface {

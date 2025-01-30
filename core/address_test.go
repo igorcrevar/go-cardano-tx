@@ -11,7 +11,7 @@ func TestAddressParts(t *testing.T) {
 	wallet1, err := GenerateWallet(true)
 	require.NoError(t, err)
 
-	wallet3 := NewWallet(wallet1.VerificationKey, wallet1.SigningKey)
+	wallet3 := NewWallet(wallet1.SigningKey, nil)
 
 	cliUtils := NewCliUtils(ResolveCardanoCliBinary(TestNetNetwork))
 

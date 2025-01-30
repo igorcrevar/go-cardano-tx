@@ -1,35 +1,17 @@
 package core
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/fxamacker/cbor/v2"
 )
 
 const (
 	draftTxFile = "tx.draft"
 )
-
-// CreateTxWitness signs transaction hash and creates witness cbor
-func CreateTxWitness(txHash string, signer ITxSigner) ([]byte, error) {
-	txHashBytes, err := hex.DecodeString(txHash)
-	if err != nil {
-		return nil, err
-	}
-
-	sign, err := signer.SignTransaction(txHashBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return cbor.Marshal([][]byte{signer.GetTransactionVerificationKey(), sign})
-}
 
 type TxInput struct {
 	Hash  string `json:"hsh"`
@@ -335,22 +317,68 @@ func (b *TxBuilder) buildRawTx(protocolParamsFilePath string, fee uint64) error 
 }
 
 // SignTx signs tx and assembles all signatures in final tx
-func (b *TxBuilder) SignTx(txRaw []byte, signers []ITxSigner) ([]byte, error) {
-	txHash, err := NewCliUtils(b.cardanoCliBinary).getTxHash(txRaw, b.baseDirectory)
-	if err != nil {
-		return nil, err
-	}
-
+func (b *TxBuilder) SignTx(txRaw []byte, signers []ITxSigner) (res []byte, err error) {
 	witnesses := make([][]byte, len(signers))
 
 	for i, signer := range signers {
-		witnesses[i], err = CreateTxWitness(txHash, signer)
+		witnesses[i], err = b.CreateTxWitness(txRaw, signer)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return b.AssembleTxWitnesses(txRaw, witnesses)
+}
+
+// CreateTxWitness signs transaction hash and creates witness cbor
+func (b *TxBuilder) CreateTxWitness(txRaw []byte, wallet ITxSigner) ([]byte, error) {
+	outFilePath := filepath.Join(b.baseDirectory, "tx.wit")
+	txFilePath := filepath.Join(b.baseDirectory, "tx.raw")
+	signingKeyPath := filepath.Join(b.baseDirectory, "tx.skey")
+	signingKey, _ := wallet.GetPaymentKeys()
+
+	txBytes, err := transactionUnwitnessedRaw(txRaw).ToJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.WriteFile(txFilePath, txBytes, FilePermission); err != nil {
+		return nil, err
+	}
+
+	var title string
+	if len(signingKey) > KeySize {
+		title = "PaymentExtendedSigningKeyShelley_ed25519_bip32"
+	} else {
+		title = "PaymentSigningKeyShelley_ed25519"
+	}
+
+	key, err := NewKeyFromBytes(title, "", signingKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := key.WriteToFile(signingKeyPath); err != nil {
+		return nil, err
+	}
+
+	args := append([]string{
+		"transaction", "witness",
+		"--signing-key-file", signingKeyPath,
+		"--tx-body-file", txFilePath,
+		"--out-file", outFilePath},
+		getTestNetMagicArgs(b.testNetMagic)...)
+
+	if _, err = runCommand(b.cardanoCliBinary, args); err != nil {
+		return nil, err
+	}
+
+	bytes, err := os.ReadFile(outFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return newTransactionWitnessedRawFromJSON(bytes)
 }
 
 // AssembleTxWitnesses assembles final signed transaction
