@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"slices"
+	"sort"
 )
 
 // GetUtxosSum returns sum for tokens in utxos (including lovelace)
@@ -52,33 +54,29 @@ func IsTxInUtxos(ctx context.Context, utxoRetriever IUTxORetriever, addr string,
 }
 
 // GetTokensFromSumMap processes a map of token names to their quantities and returns a slice of TokenAmount objects
-func GetTokensFromSumMap(sum map[string]uint64, skipTokenNames ...string) (result []TokenAmount, err error) {
-	result = make([]TokenAmount, 0, len(sum)-1)
+func GetTokensFromSumMap(sum map[string]uint64, skipTokenNames ...string) ([]TokenAmount, error) {
+	tokens := make([]TokenAmount, 0, len(sum)-1)
 
 	for tokenName, amount := range sum {
-		shouldSkip := tokenName == AdaTokenName // lovelace should be skipped always
-
-		if !shouldSkip {
-			for _, name := range skipTokenNames {
-				if name == tokenName {
-					shouldSkip = true
-
-					break
-				}
-			}
-		}
-
-		if shouldSkip {
+		// lovelace should be skipped always
+		if tokenName == AdaTokenName || slices.Contains(skipTokenNames, tokenName) {
 			continue
 		}
 
-		token, err := NewTokenAmountWithFullName(tokenName, amount, true)
+		token, err := NewTokenWithFullName(tokenName, true)
 		if err != nil {
-			return result, err
+			token, err = NewTokenWithFullName(tokenName, false)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		result = append(result, token)
+		tokens = append(tokens, NewTokenAmount(token, amount))
 	}
 
-	return result, nil
+	sort.Slice(tokens, func(i, j int) bool {
+		return tokens[i].TokenName() < tokens[j].TokenName()
+	})
+
+	return tokens, nil
 }

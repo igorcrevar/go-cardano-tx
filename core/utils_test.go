@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,15 +54,15 @@ func TestGetUtxosSum(t *testing.T) {
 		{
 			Amount: 0,
 			Tokens: []TokenAmount{
-				NewTokenAmount("1", "1", 100),
-				NewTokenAmount("2", "1", 400),
+				NewTokenAmount(NewToken("1", "1"), 100),
+				NewTokenAmount(NewToken("2", "1"), 400),
 			},
 		},
 		{
 			Amount: 300,
 			Tokens: []TokenAmount{
-				NewTokenAmount("3", "3", 20),
-				NewTokenAmount("2", "1", 150),
+				NewTokenAmount(NewToken("3", "3"), 20),
+				NewTokenAmount(NewToken("2", "1"), 150),
 			},
 		},
 	})
@@ -81,18 +80,21 @@ func TestGetOutputsSum(t *testing.T) {
 	const psHash = "29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8"
 
 	// Kash_Token
-	token1, err := NewTokenAmountWithFullName(fmt.Sprintf("%s.4b6173685f546f6b656e", psHash), 190, true)
+	token1Full, err := NewTokenWithFullName(fmt.Sprintf("%s.4b6173685f546f6b656e", psHash), true)
 	require.NoError(t, err)
 
 	// Route3 token
-	token2, err := NewTokenAmountWithFullName(fmt.Sprintf("%s.Route3", psHash), 720, false)
+	token2Fn, err := NewTokenWithFullName(fmt.Sprintf("%s.Route3", psHash), false)
 	require.NoError(t, err)
+
+	token1 := NewTokenAmount(token1Full, 190)
+	token2 := NewTokenAmount(token2Fn, 720)
 
 	result := GetOutputsSum([]TxOutput{
 		NewTxOutput("", 200),
-		NewTxOutput("", 300, NewTokenAmount("1", "2", 10), token1),
+		NewTxOutput("", 300, NewTokenAmount(NewToken("1", "2"), 10), token1),
 		NewTxOutput("", 100, token2),
-		NewTxOutput("", 50, NewTokenAmount("1", "2", 30)),
+		NewTxOutput("", 50, NewTokenAmount(NewToken("1", "2"), 30)),
 	})
 
 	require.Equal(t, 4, len(result))
@@ -104,8 +106,8 @@ func TestGetOutputsSum(t *testing.T) {
 
 func TestGetTokensFromSumMap(t *testing.T) {
 	tokens := []TokenAmount{
-		NewTokenAmount("29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8", "Route3", 54),
-		NewTokenAmount("72f3d1e6c885e4d0bdcf5250513778dbaa851c0b4bfe3ed4e1bcceb0", "Kash_Token", 180),
+		NewTokenAmount(NewToken("29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8", "Route3"), 54),
+		NewTokenAmount(NewToken("72f3d1e6c885e4d0bdcf5250513778dbaa851c0b4bfe3ed4e1bcceb0", "Kash_Token"), 180),
 	}
 	sum := map[string]uint64{
 		"72f3d1e6c885e4d0bdcf5250513778dbaa851c0b4bfe3ed4e1bcceb0.4b6173685f546f6b656e": 180,
@@ -114,10 +116,6 @@ func TestGetTokensFromSumMap(t *testing.T) {
 	}
 
 	res, err := GetTokensFromSumMap(sum)
-
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].TokenName() < res[j].TokenName()
-	})
 
 	require.NoError(t, err)
 	require.Equal(t, tokens, res)

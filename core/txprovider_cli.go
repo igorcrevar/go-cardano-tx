@@ -111,9 +111,8 @@ func (b *TxProviderCli) GetUtxos(_ context.Context, addr string) ([]Utxo, error)
 						}
 
 						inputs[i].Tokens = append(inputs[i].Tokens, TokenAmount{
-							PolicyID: tokenData[0],
-							Name:     tokenData[1],
-							Amount:   amount,
+							Token:  NewToken(tokenData[0], tokenData[1]),
+							Amount: amount,
 						})
 
 						j++

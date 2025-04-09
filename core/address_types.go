@@ -338,14 +338,26 @@ func (addrParser cardanoByronAddressParser) ToString(bytes []byte) string {
 }
 
 func (addrParser cardanoByronAddressParser) ToCardanoAddressInfo(bytes []byte) CardanoAddressInfo {
+	const cborMetaDataNumber = 24
+
 	var rawAddr struct {
 		_        struct{} `cbor:",toarray"`
 		Tag      cbor.Tag
 		Checksum uint32
 	}
 
-	_ = cbor.Unmarshal(bytes, &rawAddr)
-	rawTag, _ := rawAddr.Tag.Content.([]byte)
+	if err := cbor.Unmarshal(bytes, &rawAddr); err != nil {
+		return CardanoAddressInfo{
+			AddressType: UnsupportedAddress,
+		}
+	}
+
+	rawTag, ok := rawAddr.Tag.Content.([]byte)
+	if !ok || rawAddr.Tag.Number != cborMetaDataNumber {
+		return CardanoAddressInfo{
+			AddressType: UnsupportedAddress,
+		}
+	}
 
 	var byron struct {
 		_      struct{} `cbor:",toarray"`
@@ -363,9 +375,11 @@ func (addrParser cardanoByronAddressParser) ToCardanoAddressInfo(bytes []byte) C
 		}
 	}
 
+	netInfo := byron.Attrs.Network
+
 	network := MainNetNetwork
-	if len(byron.Attrs.Network) == 1 && byron.Attrs.Network[0] == 1 ||
-		len(byron.Attrs.Network) == 5 && binary.BigEndian.Uint32(byron.Attrs.Network[1:]) == uint32(TestNetProtocolMagic) {
+	if len(netInfo) == 1 && (netInfo[0] == byte(PreProdProtocolMagic) || netInfo[0] == byte(PreviewProtocolMagic)) ||
+		len(netInfo) == 5 && binary.BigEndian.Uint32(netInfo[1:]) != uint32(MainNetProtocolMagic) {
 		network = TestNetNetwork
 	}
 

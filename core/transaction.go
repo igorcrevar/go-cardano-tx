@@ -140,6 +140,16 @@ func (b *TxBuilder) AddOutputs(outputs ...TxOutput) *TxBuilder {
 	return b
 }
 
+func (b *TxBuilder) ReplaceOutput(index int, output TxOutput) *TxBuilder {
+	if index < 0 {
+		index = len(b.outputs) + index
+	}
+
+	b.outputs[index] = output
+
+	return b
+}
+
 func (b *TxBuilder) UpdateOutputAmount(index int, amount uint64, tokenAmounts ...uint64) *TxBuilder {
 	if index < 0 {
 		index = len(b.outputs) + index
@@ -231,6 +241,30 @@ func (b *TxBuilder) CalculateFee(witnessCount int) (uint64, error) {
 	return strconv.ParseUint(strings.Split(feeOutput, " ")[0], 10, 64)
 }
 
+func (b *TxBuilder) CalculateMinUtxo(output TxOutput) (uint64, error) {
+	if b.protocolParameters == nil {
+		return 0, errors.New("protocol parameters not set")
+	}
+
+	protocolParamsFilePath := filepath.Join(b.baseDirectory, "protocol-parameters.json")
+	if err := os.WriteFile(protocolParamsFilePath, b.protocolParameters, FilePermission); err != nil {
+		return 0, err
+	}
+
+	result, err := runCommand(b.cardanoCliBinary, []string{
+		"transaction", "calculate-min-required-utxo",
+		"--protocol-params-file", protocolParamsFilePath,
+		"--tx-out", output.String(),
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	result = strings.TrimSpace(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(result)), AdaTokenName))
+
+	return strconv.ParseUint(result, 0, 64)
+}
+
 func (b *TxBuilder) Build() ([]byte, string, error) {
 	if b.protocolParameters == nil {
 		return nil, "", errors.New("protocol parameters not set")
@@ -319,7 +353,6 @@ func (b *TxBuilder) buildRawTx(protocolParamsFilePath string, fee uint64) error 
 // SignTx signs tx and assembles all signatures in final tx
 func (b *TxBuilder) SignTx(txRaw []byte, signers []ITxSigner) (res []byte, err error) {
 	witnesses := make([][]byte, len(signers))
-
 	for i, signer := range signers {
 		witnesses[i], err = b.CreateTxWitness(txRaw, signer)
 		if err != nil {

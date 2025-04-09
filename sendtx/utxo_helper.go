@@ -30,15 +30,20 @@ func GetUTXOsForAmounts(
 	tryAtLeastInputs int,
 ) (cardanowallet.TxInputs, error) {
 	currentSum := map[string]uint64{}
+	currentSumTotal := map[string]uint64{}
 	choosenCount := 0
 
-	for _, utxo := range utxos {
-		utxos[choosenCount] = utxo
+	for i, utxo := range utxos {
+		// move the current UTXO to the end of the selected UTXOs list
+		// while ensuring that all existing UTXOs remain in the list
+		utxos[choosenCount], utxos[i] = utxo, utxos[choosenCount]
 		choosenCount++
 		currentSum[cardanowallet.AdaTokenName] += utxo.Amount
+		currentSumTotal[cardanowallet.AdaTokenName] += utxo.Amount
 
 		for _, token := range utxo.Tokens {
 			currentSum[token.TokenName()] += token.Amount
+			currentSumTotal[token.TokenName()] += token.Amount
 		}
 
 		if isSumSatisfiesCondition(currentSum, conditions) {
@@ -60,9 +65,14 @@ func GetUTXOsForAmounts(
 		}
 	}
 
+	if isSumSatisfiesCondition(currentSumTotal, conditions) {
+		return cardanowallet.TxInputs{}, fmt.Errorf(
+			"%w: %s vs %s", cardanowallet.ErrUTXOsLimitReached,
+			mapStrUInt64ToStr(currentSumTotal), mapStrUInt64ToStr(conditions))
+	}
+
 	return cardanowallet.TxInputs{}, fmt.Errorf(
-		"not enough funds for the transaction: available = %s; conditions = %s",
-		mapStrUInt64ToStr(currentSum), mapStrUInt64ToStr(conditions))
+		"%w: %s vs %s", cardanowallet.ErrUTXOsCouldNotSelect, mapStrUInt64ToStr(currentSum), mapStrUInt64ToStr(conditions))
 }
 
 func utxos2TxInputs(utxos []cardanowallet.Utxo) []cardanowallet.TxInput {
@@ -117,35 +127,12 @@ func findMinUtxo(
 
 	idx := 0
 	minUtxo := utxos[0]
-
-	// two lops, one for ada and one for tokens
-	if replaceTokenName == cardanowallet.AdaTokenName {
-		for i, utxo := range utxos[1:] {
-			if utxo.Amount < minUtxo.Amount {
-				minUtxo = utxo
-				idx = i + 1
-			}
-		}
-
-		return minUtxo, idx
-	}
-
-	getTokensAmount := func(utxo cardanowallet.Utxo, tokenName string) uint64 {
-		for _, token := range utxo.Tokens {
-			if token.TokenName() == tokenName {
-				return token.Amount
-			}
-		}
-
-		return 0
-	}
-	minCmpAmount := getTokensAmount(minUtxo, replaceTokenName)
+	minCmpAmount := minUtxo.GetTokenAmount(replaceTokenName)
 
 	for i, utxo := range utxos[1:] {
-		amountTokens := getTokensAmount(utxo, replaceTokenName)
-		if amountTokens < minCmpAmount || (amountTokens == minCmpAmount && utxo.Amount < minUtxo.Amount) {
-			minCmpAmount = amountTokens
+		if amount := utxo.GetTokenAmount(replaceTokenName); amount < minCmpAmount {
 			minUtxo = utxo
+			minCmpAmount = amount
 			idx = i + 1
 		}
 	}

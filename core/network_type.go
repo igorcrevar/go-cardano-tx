@@ -6,6 +6,8 @@ type CardanoNetworkType byte
 
 const (
 	TestNetProtocolMagic = uint(1097911063)
+	PreviewProtocolMagic = uint(2)
+	PreProdProtocolMagic = uint(1)
 	MainNetProtocolMagic = uint(764824073)
 
 	MainNetNetwork CardanoNetworkType = 1

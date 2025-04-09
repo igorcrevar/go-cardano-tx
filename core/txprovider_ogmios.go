@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const ogmiosJSONRPCVersion = "2.0"
+const (
+	ogmiosJSONRPCVersion = "2.0"
+	adaTokenPolicyID     = "ada"
+)
 
 type TxProviderOgmios struct {
 	url string
@@ -149,7 +152,7 @@ func (o *TxProviderOgmios) GetUtxos(ctx context.Context, addr string) ([]Utxo, e
 		}
 
 		for policyID, nameValueMap := range utxo.Value {
-			if policyID == AdaTokenPolicyID {
+			if policyID == adaTokenPolicyID {
 				adaValue = nameValueMap[AdaTokenName]
 			} else {
 				for name, value := range nameValueMap {
@@ -159,9 +162,8 @@ func (o *TxProviderOgmios) GetUtxos(ctx context.Context, addr string) ([]Utxo, e
 					}
 
 					tokens = append(tokens, TokenAmount{
-						PolicyID: policyID,
-						Name:     name,
-						Amount:   value,
+						Token:  NewToken(policyID, name),
+						Amount: value,
 					})
 				}
 			}

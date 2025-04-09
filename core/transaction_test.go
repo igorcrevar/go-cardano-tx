@@ -284,3 +284,70 @@ func TestCreateTxWitnessAndAssembleTxWitnesses(t *testing.T) {
 
 	require.Equal(t, txWitness, hex.EncodeToString(txFinal))
 }
+
+func TestCalculateMinUtxo(t *testing.T) {
+	t.Parallel()
+
+	token1, _ := NewTokenWithFullName("29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8.4b6173685f546f6b656e", true)
+	token2, _ := NewTokenWithFullName("29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8.Route3", false)
+	token3, _ := NewTokenWithFullName("29f8873beb52e126f207a2dfd50f7cff556806b5b4cba9834a7b26a8.Route345", false)
+
+	tokenAmount1 := NewTokenAmount(token1, 11_000_039)
+	tokenAmount2 := NewTokenAmount(token2, 236_872_039)
+	tokenAmount3 := NewTokenAmount(token3, 12_236_872_039)
+
+	output := TxOutput{
+		Addr:   "addr_test1vqjysa7p4mhu0l25qknwznvj0kghtr29ud7zp732ezwtzec0w8g3u",
+		Amount: uint64(1_000_000),
+		Tokens: []TokenAmount{
+			tokenAmount1, tokenAmount2, tokenAmount3,
+		},
+	}
+
+	txBuilder, err := NewTxBuilder(ResolveCardanoCliBinary(MainNetNetwork))
+	require.NoError(t, err)
+
+	defer txBuilder.Dispose()
+
+	txBuilder.SetProtocolParameters(protocolParameters)
+
+	minUtxo, err := txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1189560), minUtxo)
+
+	output.Tokens[0].Amount = 2 // tokens amount does make a difference
+
+	minUtxo, err = txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1172320), minUtxo)
+
+	output.Tokens[1].Amount = 3 // tokens amount does make a difference
+
+	minUtxo, err = txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1155080), minUtxo)
+
+	output.Tokens = output.Tokens[:len(output.Tokens)-1]
+
+	minUtxo, err = txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1077500), minUtxo)
+
+	output.Tokens = nil
+
+	minUtxo, err = txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(849070), minUtxo)
+
+	output.Amount = 3_600_000_348_100_893_234 // lovelace amount does not make a difference
+
+	minUtxo, err = txBuilder.CalculateMinUtxo(output)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(849070), minUtxo)
+}

@@ -11,6 +11,10 @@ import (
 	"strconv"
 )
 
+const (
+	blockfrostAuthHeaderKey = "project_id"
+)
+
 type blockFrostQueryUtxoResponse struct {
 	Address     string `json:"address"`
 	Hash        string `json:"tx_hash"`
@@ -23,16 +27,18 @@ type blockFrostQueryUtxoResponse struct {
 }
 
 type TxProviderBlockFrost struct {
-	url       string
-	projectID string
+	url           string
+	projectID     string
+	authHeaderKey string
 }
 
 var _ ITxProvider = (*TxProviderBlockFrost)(nil)
 
 func NewTxProviderBlockFrost(url string, projectID string) *TxProviderBlockFrost {
 	return &TxProviderBlockFrost{
-		projectID: projectID,
-		url:       url,
+		projectID:     projectID,
+		url:           url,
+		authHeaderKey: blockfrostAuthHeaderKey,
 	}
 }
 
@@ -48,7 +54,7 @@ func (b *TxProviderBlockFrost) GetProtocolParameters(ctx context.Context) ([]byt
 
 	// Set the Content-Type header to application/json
 	req.Header.Set("Content-Type", "application/cbor")
-	req.Header.Set("project_id", b.projectID)
+	req.Header.Set(b.authHeaderKey, b.projectID)
 
 	// Make the HTTP request
 	resp, err := new(http.Client).Do(req)
@@ -80,7 +86,7 @@ func (b *TxProviderBlockFrost) GetUtxos(ctx context.Context, addr string) ([]Utx
 
 	// Set the Content-Type header to application/json
 	req.Header.Set("Content-Type", "application/cbor")
-	req.Header.Set("project_id", b.projectID)
+	req.Header.Set(b.authHeaderKey, b.projectID)
 
 	// Make the HTTP request
 	resp, err := new(http.Client).Do(req)
@@ -127,9 +133,8 @@ func (b *TxProviderBlockFrost) GetUtxos(ctx context.Context, addr string) ([]Utx
 				}
 
 				tokens = append(tokens, TokenAmount{
-					PolicyID: policyID,
-					Name:     name,
-					Amount:   tmpAmount,
+					Token:  NewToken(policyID, name),
+					Amount: tmpAmount,
 				})
 			}
 		}
@@ -154,7 +159,7 @@ func (b *TxProviderBlockFrost) GetTip(ctx context.Context) (QueryTipData, error)
 
 	// Set the Content-Type header to application/json
 	req.Header.Set("Content-Type", "application/cbor")
-	req.Header.Set("project_id", b.projectID)
+	req.Header.Set(b.authHeaderKey, b.projectID)
 
 	// Make the HTTP request
 	resp, err := new(http.Client).Do(req)
@@ -185,15 +190,19 @@ func (b *TxProviderBlockFrost) GetTip(ctx context.Context) (QueryTipData, error)
 }
 
 func (b *TxProviderBlockFrost) SubmitTx(ctx context.Context, txSigned []byte) error {
+	return blockfrostSubmitTx(ctx, b.url+"/tx/submit", b.authHeaderKey, b.projectID, txSigned)
+}
+
+func blockfrostSubmitTx(ctx context.Context, endpointURL, authHeader, authKey string, txSigned []byte) error {
 	// Create a request with the JSON payload
-	req, err := http.NewRequestWithContext(ctx, "POST", b.url+"/tx/submit", bytes.NewBuffer(txSigned))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpointURL, bytes.NewBuffer(txSigned))
 	if err != nil {
 		return err
 	}
 
 	// Set the Content-Type header to application/json
 	req.Header.Set("Content-Type", "application/cbor")
-	req.Header.Set("project_id", b.projectID)
+	req.Header.Set(authHeader, authKey)
 
 	// Make the HTTP request
 	resp, err := new(http.Client).Do(req)
@@ -204,7 +213,7 @@ func (b *TxProviderBlockFrost) SubmitTx(ctx context.Context, txSigned []byte) er
 	defer resp.Body.Close()
 
 	// Check the HTTP status code
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		return getErrorFromResponse(resp)
 	}
 
@@ -219,7 +228,7 @@ func (b *TxProviderBlockFrost) GetTxByHash(ctx context.Context, hash string) (ma
 	}
 
 	// Set the Content-Type header to application/json
-	req.Header.Set("project_id", b.projectID)
+	req.Header.Set(b.authHeaderKey, b.projectID)
 
 	// Make the HTTP request
 	resp, err := new(http.Client).Do(req)
